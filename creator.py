@@ -1,6 +1,11 @@
 from bs4 import BeautifulSoup, Comment, Tag
+import requests
 import typer
 from typing_extensions import Annotated
+
+
+def is_local(src):
+    return not (src.startswith('http://') or src.startswith('https://'))
 
 
 def get_soup_from_file(file: str) -> BeautifulSoup:
@@ -50,6 +55,32 @@ def main(html_file: Annotated[str, typer.Argument()]):
     path = html_file.rstrip(file)
 
     soup = get_soup_from_file(html_file)
+
+    # replace javascripts
+    # Alle script-Tags finden
+    scripts = soup.find_all("script", src=True)
+
+    # Für jedes script-Tag das src-Attribut prüfen
+    for script in scripts:
+        src = script['src']
+
+        # Wenn die Datei nicht lokal ist, dann Inhalte herunterladen
+        if not is_local(src):
+            try:
+                # Abrufen des JS-Inhalts
+                response = requests.get(src)
+                response.raise_for_status()  # Prüfen, ob der Abruf erfolgreich war
+                js_content = response.text
+
+                # Neuen script-Tag mit JS-Inhalt erstellen
+                new_script = soup.new_tag("script")
+                new_script.string = js_content
+
+                # Ersetzen des alten script-Tags
+                script.replace_with(new_script)
+
+            except requests.exceptions.RequestException as e:
+                print(f"Fehler beim Abrufen der Datei {src}: {e}")
 
     # for each section tag
     for section_tag in soup.find_all("section"):
